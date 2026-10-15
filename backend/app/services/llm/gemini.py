@@ -1,25 +1,28 @@
 import json
 import logging
-from google import genai
-from google.genai import types
+
 from app.config import settings
 from app.schemas.card import (
     CardGenerateRequest,
     CardGenerateResponse,
     CardRefineRequest,
     CardRefineResponse,
-    GeneratedCard
+    GeneratedCard,
 )
+from google import genai
+from google.genai import types
 
 logger = logging.getLogger(__name__)
+
 
 class GeminiServiceError(Exception):
     pass
 
+
 class GeminiService:
     def __init__(self, api_key: str | None = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
-        self.model = settings.GEMINI_MODEL or "gemini-2.5-flash"
+        self.model = settings.GEMINI_MODEL or "gemini-3.8-flash"
 
     def _get_client(self) -> genai.Client:
         key = self.api_key or settings.GEMINI_API_KEY
@@ -29,7 +32,9 @@ class GeminiService:
             )
         return genai.Client(api_key=key.strip())
 
-    async def generate_cards(self, request: CardGenerateRequest) -> CardGenerateResponse:
+    async def generate_cards(
+        self, request: CardGenerateRequest
+    ) -> CardGenerateResponse:
         client = self._get_client()
 
         format_instruction = ""
@@ -46,14 +51,18 @@ class GeminiService:
                 "or multiple {{c1::...}} markers. "
                 "'back' should provide a brief contextual explanation or extra detail."
             )
-        else: # mixed
+        else:  # mixed
             format_instruction = (
                 "Create a balanced mix of 'basic' questions and 'cloze' deletions. "
                 "Use 'cloze' with {{c1::keyword}} when memorizing definitions, dates, or precise terms. "
                 "Use 'basic' for conceptual explanations or 'why/how' questions."
             )
 
-        custom_prompt_text = f"\nUser Custom Directives:\n{request.custom_prompt}" if request.custom_prompt else ""
+        custom_prompt_text = (
+            f"\nUser Custom Directives:\n{request.custom_prompt}"
+            if request.custom_prompt
+            else ""
+        )
 
         system_instruction = (
             "You are a master pedagogical flashcard designer creating high-yield Anki flashcards. "
@@ -66,7 +75,7 @@ class GeminiService:
 
         user_content = (
             f"Generate exactly {request.quantity} high-quality flashcards from the following text:\n\n"
-            f"\"\"\"\n{request.content}\n\"\"\"\n"
+            f'"""\n{request.content}\n"""\n'
             f"{custom_prompt_text}"
         )
 
@@ -75,14 +84,12 @@ class GeminiService:
                 system_instruction=system_instruction,
                 temperature=0.3,
                 response_mime_type="application/json",
-                response_schema=CardGenerateResponse
+                response_schema=CardGenerateResponse,
             )
 
             # Generate via Google GenAI SDK (synchronous call wrapped safely)
             response = client.models.generate_content(
-                model=self.model,
-                contents=user_content,
-                config=config
+                model=self.model, contents=user_content, config=config
             )
 
             if not response.text:
@@ -122,17 +129,17 @@ class GeminiService:
                 system_instruction=system_instruction,
                 temperature=0.3,
                 response_mime_type="application/json",
-                response_schema=CardRefineResponse
+                response_schema=CardRefineResponse,
             )
 
             response = client.models.generate_content(
-                model=self.model,
-                contents=user_content,
-                config=config
+                model=self.model, contents=user_content, config=config
             )
 
             if not response.text:
-                raise GeminiServiceError("Empty response from Gemini API during refinement")
+                raise GeminiServiceError(
+                    "Empty response from Gemini API during refinement"
+                )
 
             data = json.loads(response.text)
             return CardRefineResponse(**data)
@@ -142,5 +149,6 @@ class GeminiService:
         except Exception as e:
             logger.error(f"Gemini refinement error: {e}")
             raise GeminiServiceError(f"Failed to refine cards: {str(e)}")
+
 
 gemini_service = GeminiService()

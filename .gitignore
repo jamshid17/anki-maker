@@ -1,8 +1,10 @@
-DS_Store
+.DS_Store
 backend/venv
+.env
 backend/.env
 backend/anki_maker.db
-PLAN.md
+data/
+
 
 __pycache__/
 
